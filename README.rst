@@ -1,193 +1,62 @@
-.. -*- mode: rst -*-
+import sys
+from scikits.learn.feature_extraction.text import CountVectorizer
+from scikits.learn.feature_extraction.text import TfidfTransformer
+from scikits.learn.svm.sparse import LinearSVC
+from scikits.learn.pipeline import Pipeline
+from scikits.learn.grid_search import GridSearchCV
+from scikits.learn.datasets import load_files
+from scikits.learn import metrics
 
-|Azure|_ |Travis|_ |Codecov|_ |CircleCI|_ |Nightly wheels|_ |Black|_ |PythonVersion|_ |PyPi|_ |DOI|_
-
-.. |Azure| image:: https://dev.azure.com/scikit-learn/scikit-learn/_apis/build/status/scikit-learn.scikit-learn?branchName=main
-.. _Azure: https://dev.azure.com/scikit-learn/scikit-learn/_build/latest?definitionId=1&branchName=main
-
-.. |Travis| image:: https://api.travis-ci.com/scikit-learn/scikit-learn.svg?branch=main
-.. _Travis: https://travis-ci.com/scikit-learn/scikit-learn
-
-.. |Codecov| image:: https://codecov.io/gh/scikit-learn/scikit-learn/branch/main/graph/badge.svg?token=Pk8G9gg3y9
-.. _Codecov: https://codecov.io/gh/scikit-learn/scikit-learn
-
-.. |CircleCI| image:: https://circleci.com/gh/scikit-learn/scikit-learn/tree/main.svg?style=shield&circle-token=:circle-token
-.. _CircleCI: https://circleci.com/gh/scikit-learn/scikit-learn
-
-.. |Nightly wheels| image:: https://github.com/scikit-learn/scikit-learn/workflows/Wheel%20builder/badge.svg?event=schedule
-.. _`Nightly wheels`: https://github.com/scikit-learn/scikit-learn/actions?query=workflow%3A%22Wheel+builder%22+event%3Aschedule
-
-.. |PythonVersion| image:: https://img.shields.io/badge/python-3.7%20%7C%203.8%20%7C%203.9-blue
-.. _PythonVersion: https://img.shields.io/badge/python-3.7%20%7C%203.8%20%7C%203.9-blue
-
-.. |PyPi| image:: https://badge.fury.io/py/scikit-learn.svg
-.. _PyPi: https://badge.fury.io/py/scikit-learn
-
-.. |Black| image:: https://img.shields.io/badge/code%20style-black-000000.svg
-.. _Black: https://github.com/psf/black
-
-.. |DOI| image:: https://zenodo.org/badge/21369/scikit-learn/scikit-learn.svg
-.. _DOI: https://zenodo.org/badge/latestdoi/21369/scikit-learn/scikit-learn
+#
+# The real code starts here
+#
 
 
-.. |PythonMinVersion| replace:: 3.7
-.. |NumPyMinVersion| replace:: 1.14.6
-.. |SciPyMinVersion| replace:: 1.1.0
-.. |JoblibMinVersion| replace:: 0.11
-.. |ThreadpoolctlMinVersion| replace:: 2.0.0
-.. |MatplotlibMinVersion| replace:: 2.2.2
-.. |Scikit-ImageMinVersion| replace:: 0.14.5
-.. |PandasMinVersion| replace:: 0.25.0
-.. |SeabornMinVersion| replace:: 0.9.0
-.. |PytestMinVersion| replace:: 5.0.1
+# the training data folder must be passed as first argument
+movie_reviews_data_folder = sys.argv[1]
+dataset = load_files(movie_reviews_data_folder)
 
-.. image:: doc/logos/scikit-learn-logo.png
-  :target: https://scikit-learn.org/
+# split the dataset in training and test set:
+n_samples_total = dataset.filenames.shape[0]
 
-**scikit-learn** is a Python module for machine learning built on top of
-SciPy and is distributed under the 3-Clause BSD license.
+split = (n_samples_total * 3) / 4
 
-The project was started in 2007 by David Cournapeau as a Google Summer
-of Code project, and since then many volunteers have contributed. See
-the `About us <https://scikit-learn.org/dev/about.html#authors>`__ page
-for a list of core contributors.
+docs_train = [open(f).read() for f in dataset.filenames[:split]]
+docs_test = [open(f).read() for f in dataset.filenames[split:]]
 
-It is currently maintained by a team of volunteers.
+y_train = dataset.target[:split]
+y_test = dataset.target[split:]
 
-Website: https://scikit-learn.org
+# Build a vectorizer / classifier pipeline using the previous analyzer
+pipeline = Pipeline([
+    ('vect', CountVectorizer(max_features=100000)),
+    ('tfidf', TfidfTransformer()),
+    ('clf', LinearSVC(C=1000)),
+])
 
-Installation
-------------
+parameters = {
+    'vect__analyzer__max_n': (1, 2),
+    'vect__max_df': (.95,),
+}
 
-Dependencies
-~~~~~~~~~~~~
+# Fit the pipeline on the training set using grid search for the parameters
+grid_search = GridSearchCV(pipeline, parameters, n_jobs=-1)
+grid_search.fit(docs_train[:200], y_train[:200])
 
-scikit-learn requires:
+# Refit the best parameter set on the complete training set
+clf = grid_search.best_estimator.fit(docs_train, y_train)
 
-- Python (>= |PythonMinVersion|)
-- NumPy (>= |NumPyMinVersion|)
-- SciPy (>= |SciPyMinVersion|)
-- joblib (>= |JoblibMinVersion|)
-- threadpoolctl (>= |ThreadpoolctlMinVersion|)
+# Predict the outcome on the testing set
+y_predicted = clf.predict(docs_test)
 
-=======
+# Print the classification report
+print metrics.classification_report(y_test, y_predicted,
+                                    class_names=dataset.target_names)
 
-**Scikit-learn 0.20 was the last version to support Python 2.7 and Python 3.4.**
-scikit-learn 0.23 and later require Python 3.6 or newer.
-scikit-learn 1.0 and later require Python 3.7 or newer.
+# Plot the confusion matrix
+cm = metrics.confusion_matrix(y_test, y_predicted)
+print cm
 
-Scikit-learn plotting capabilities (i.e., functions start with ``plot_`` and
-classes end with "Display") require Matplotlib (>= |MatplotlibMinVersion|).
-For running the examples Matplotlib >= |MatplotlibMinVersion| is required.
-A few examples require scikit-image >= |Scikit-ImageMinVersion|, a few examples
-require pandas >= |PandasMinVersion|, some examples require seaborn >=
-|SeabornMinVersion|.
-
-User installation
-~~~~~~~~~~~~~~~~~
-
-If you already have a working installation of numpy and scipy,
-the easiest way to install scikit-learn is using ``pip``   ::
-
-    pip install -U scikit-learn
-
-or ``conda``::
-
-    conda install -c conda-forge scikit-learn
-
-The documentation includes more detailed `installation instructions <https://scikit-learn.org/stable/install.html>`_.
-
-
-Changelog
----------
-
-See the `changelog <https://scikit-learn.org/dev/whats_new.html>`__
-for a history of notable changes to scikit-learn.
-
-Development
------------
-
-We welcome new contributors of all experience levels. The scikit-learn
-community goals are to be helpful, welcoming, and effective. The
-`Development Guide <https://scikit-learn.org/stable/developers/index.html>`_
-has detailed information about contributing code, documentation, tests, and
-more. We've included some basic information in this README.
-
-Important links
-~~~~~~~~~~~~~~~
-
-- Official source code repo: https://github.com/scikit-learn/scikit-learn
-- Download releases: https://pypi.org/project/scikit-learn/
-- Issue tracker: https://github.com/scikit-learn/scikit-learn/issues
-
-Source code
-~~~~~~~~~~~
-
-You can check the latest sources with the command::
-
-    git clone https://github.com/scikit-learn/scikit-learn.git
-
-Contributing
-~~~~~~~~~~~~
-
-To learn more about making a contribution to scikit-learn, please see our
-`Contributing guide
-<https://scikit-learn.org/dev/developers/contributing.html>`_.
-
-Testing
-~~~~~~~
-
-After installation, you can launch the test suite from outside the source
-directory (you will need to have ``pytest`` >= |PyTestMinVersion| installed)::
-
-    pytest sklearn
-
-See the web page https://scikit-learn.org/dev/developers/advanced_installation.html#testing
-for more information.
-
-    Random number generation can be controlled during testing by setting
-    the ``SKLEARN_SEED`` environment variable.
-
-Submitting a Pull Request
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Before opening a Pull Request, have a look at the
-full Contributing page to make sure your code complies
-with our guidelines: https://scikit-learn.org/stable/developers/index.html
-
-Project History
----------------
-
-The project was started in 2007 by David Cournapeau as a Google Summer
-of Code project, and since then many volunteers have contributed. See
-the `About us <https://scikit-learn.org/dev/about.html#authors>`__ page
-for a list of core contributors.
-
-The project is currently maintained by a team of volunteers.
-
-**Note**: `scikit-learn` was previously referred to as `scikits.learn`.
-
-Help and Support
-----------------
-
-Documentation
-~~~~~~~~~~~~~
-
-- HTML documentation (stable release): https://scikit-learn.org
-- HTML documentation (development version): https://scikit-learn.org/dev/
-- FAQ: https://scikit-learn.org/stable/faq.html
-
-Communication
-~~~~~~~~~~~~~
-
-- Mailing list: https://mail.python.org/mailman/listinfo/scikit-learn
-- Gitter: https://gitter.im/scikit-learn/scikit-learn
-- Twitter: https://twitter.com/scikit_learn
-- Stack Overflow: https://stackoverflow.com/questions/tagged/scikit-learn
-- Github Discussions: https://github.com/scikit-learn/scikit-learn/discussions
-- Website: https://scikit-learn.org
-
-Citation
-~~~~~~~~
-
-If you use scikit-learn in a scientific publication, we would appreciate citations: https://scikit-learn.org/stable/about.html#citing-scikit-learn
+# import pylab as pl
+#pl.matshow(cm)
+#pl.show()
